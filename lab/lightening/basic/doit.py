@@ -7,7 +7,7 @@ import lightning as L
 import torch.utils.data as data
 
 
-from model import LitAutoEncoder
+from models.latentMAE import LitAutoEncoder
 
 
 transform = transforms.ToTensor()
