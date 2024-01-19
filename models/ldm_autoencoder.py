@@ -49,7 +49,7 @@ class AutoencoderKL(pl.LightningModule):
                 if k.startswith(ik):
                     del sd[k]
         self.load_state_dict(sd, strict=True)
-        print(f"AutoEncoder restored from {path}")
+        
 
     def encode(self, x):
         h = self.encoder(x)
