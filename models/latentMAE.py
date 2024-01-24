@@ -67,14 +67,13 @@ class LatentMAE(pl.LightningModule):
         self.out_adaper = adapter(self.num_patches, latent_mae_shape, latent_shape)
 
     def forward(self, x, mask_ratio=0.75):
-        assert list(x.shape)[1:] == self.input_shape
+        # assert list(x.shape)[1:] == self.input_shape
         B = x.shape[0]
-        # Move the input to latent space
         z = self.autoencoder.encode(x).sample()
-        z = self.in_adaper(z)
-        z, mask, ids_restore = self.mae.forward_encoder(z, mask_ratio)
-        z = self.mae.forward_decoder(z, ids_restore)  # [N, L, p*p*3]
-        z = self.out_adaper(z)        
+        # z = self.in_adaper(z)
+        # z, mask, ids_restore = self.mae.forward_encoder(z, mask_ratio)
+        # z = self.mae.forward_decoder(z, ids_restore)  # [N, L, p*p*3]
+        # z = self.out_adaper(z)        
         z = self.autoencoder.decode(z)
 
         return z
