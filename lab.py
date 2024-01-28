@@ -21,13 +21,12 @@ def test_autoencoder():
     resizer = transforms.Resize((224, 224))
     totensor = transforms.ToTensor()
     ToPIL = transforms.ToPILImage()
-    sample = totensor(resizer(Image.open("sample.jpg"))).unsqueeze(0)    
+    sample = totensor(resizer(Image.open("lab/temp_data/sample.jpg"))).unsqueeze(0)    
     model = LatentMAE()
     model.load_pretrained_weights()
-    reconstructed = model(sample)
-    ToPIL(reconstructed[0]).save(os.path.join("reconstructed_224.jpg"))
+    reconstructed = model(sample, mode = LatentMAE.forward_mode.autoencoder)
+    ToPIL(reconstructed[0]).save(os.path.join("lab/temp_data/reconstructed.jpg"))
 
-# test_model()
-test_autoencoder()
-
+test_model()
+# test_autoencoder()
 
