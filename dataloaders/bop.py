@@ -9,13 +9,27 @@ from torch.utils.data import Dataset
 
 from torchvision.transforms.functional import pil_to_tensor
 from torchvision.transforms import ToPILImage, ToTensor, Resize, Compose
+import pytorch_lightning as pl
 
 
 from PIL import Image
 import open3d as o3d
+import cv2
+from torch.utils.data import DataLoader
 
 
 class BOP(Dataset):
+    """
+    BOP dataset class for loading data from the BOP dataset.
+
+    Args:
+        root_dir (str): Root directory of the dataset.
+        phase (str): Phase of the dataset, either 'train', 'val', or 'test'.
+        transform (callable, optional): Optional transform to be applied on a sample.
+        obj_id_list (list, optional): List of object IDs to include in the dataset. If empty, includes all object IDs from 1 to 30.
+        vis_ratio (float, optional): Minimum visibility ratio for objects to be included in the dataset.
+        remove_repeated_objects (bool, optional): Whether to remove scenes with repeated objects.
+    """
 
     def __init__(self, root_dir, phase, transform=None, obj_id_list=[], vis_ratio=0, remove_repeated_objects=False):
         super().__init__()
@@ -34,6 +48,7 @@ class BOP(Dataset):
         else:
             self.logger.info(f'Loading data from {self.root}')
 
+        self.depth_threshold = 3000
         # set the directories related to the T-Less dataset
         self.train_dir = os.path.join(self.root, "train_pbr")
         self.test_dir = os.path.join(
@@ -45,6 +60,106 @@ class BOP(Dataset):
         self.selected_scenes = []
         assert phase in ['train', 'val', 'test']
         base_dir = self.train_dir if phase in ['train'] else self.test_dir
+
+        self.create_data_list(obj_id_list, vis_ratio,
+                              remove_repeated_objects, base_dir)
+
+        if transform is None:
+            self.transform = Compose([Resize((448, 448)), ToTensor()])
+        else:
+            self.transform = transform
+
+    def __len__(self):
+        """
+        Returns the number of scenes in the dataset.
+
+        Returns:
+            int: Number of scenes in the dataset.
+        """
+        return len(self.selected_scenes)
+
+    def __getitem__(self, ind):
+        """
+        Returns a sample from the dataset at the given index.
+
+        Args:
+            ind (int): Index of the sample to retrieve.
+
+        Returns:
+            dict: A dictionary containing the RGB image, XYZ map, RGB image path, and depth image path.
+        """
+        rgb_path = os.path.join(self.selected_scenes[ind]["dir"], "rgb", str(
+            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".jpg")
+        depth_path = os.path.join(self.selected_scenes[ind]["dir"], "depth", str(
+            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".png")
+
+        rgb = Image.open(rgb_path)
+        rgb = self.transform(rgb)
+
+        cam_K = np.array(self.selected_scenes[ind]["cam_K"]).reshape(3, 3)
+        cam_depth_scale = 1 / self.selected_scenes[ind]["depth_scale"]
+        depth_image = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+        depth_image = torch.from_numpy(depth_image.astype(float))
+        xyz_map = self.calculate_xyz_map(depth_image, cam_K, cam_depth_scale)
+        xyz_map = ToPILImage()(xyz_map)
+        xyz_map = self.transform(xyz_map)
+
+        return {"rgb": rgb, "xyz_map": xyz_map, "rgb_path": rgb_path, "depth_path": depth_path}
+
+
+    def calculate_xyz_map(self, depth_image, camera_K, cam_depth_scale):
+        """
+        Calculates the XYZ map from the depth image.
+
+        Args:
+            depth_image (torch.Tensor): Depth image.
+            camera_K (np.ndarray): Camera intrinsic matrix.
+            cam_depth_scale (float): Depth scale factor.
+
+        Returns:
+            torch.Tensor: XYZ map.
+        """
+        # Define the intrinsic parameters
+        fx = camera_K[0, 0]  # Focal length x
+        fy = camera_K[1, 1]  # Focal length y
+        cx = camera_K[0, 2]  # Center x
+        cy = camera_K[1, 2]  # Center y
+
+        # Create a meshgrid for pixel coordinates
+        height, width = depth_image.shape
+
+        x = torch.linspace(0, height - 1, height)
+        y = torch.linspace(0, width - 1, width)
+        x, y = torch.meshgrid(x, y, indexing='ij')
+
+        # Convert depth image to meters
+        # if the depth image is in millimeters
+        depth_image_meters = depth_image / cam_depth_scale
+
+        # Calculate the XYZ coordinates
+        X = (x - cx) * depth_image_meters / fx
+        Y = (y - cy) * depth_image_meters / fy
+        Z = depth_image_meters
+        # Normalize the values
+        Z[Z > self.depth_threshold] = self.depth_threshold
+        X = (X - X.min()) / (X.max() - X.min())
+        Y = (Y - Y.min()) / (Y.max() - Y.min())
+        Z = (Z - Z.min()) / (self.depth_threshold - Z.min())
+        # Stack X, Y, Z to create the 3D map
+        xyz_map = torch.dstack((X, Y, Z))
+
+        return xyz_map.permute((2, 0, 1)).float()
+
+    def create_data_list(self, obj_id_list, vis_ratio, remove_repeated_objects, base_dir):
+        """
+        Creates a list of selected scenes based on the given parameters.
+
+        Args:
+            obj_id_list (list): List of object IDs to include in the dataset.
+            vis_ratio (float): Minimum visibility ratio for objects to be included in the dataset.
+            remove_repeated_objects (bool): Whether to remove scenes with repeated objects.
+            base_dir (str): Base directory of the dataset.
+        """
         setup_dirs = [name for name in os.listdir(
             base_dir) if os.path.isdir(os.path.join(base_dir))]
         scene_obj_list = []
@@ -84,37 +199,44 @@ class BOP(Dataset):
             indexes = indexes[count == 1]
             self.selected_scenes = [self.selected_scenes[i] for i in indexes]
 
-        if transform is None:
-            self.transform = Compose([ToTensor()])
-        else:
-            self.transform = transform
 
-    def __len__(self):
-        return len(self.selected_scenes)
+class BOP_datamodule(pl.LightningDataModule):
+    """
+    LightningDataModule for BOP dataset.
 
-    def __getitem__(self, ind):
-        rgb_path = os.path.join(self.selected_scenes[ind]["dir"], "rgb", str(
-            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".jpg")
-        depth_path = os.path.join(self.selected_scenes[ind]["dir"], "depth", str(
-            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".png")
-        
-        rgb = Image.open(rgb_path)
-        rgb = pil_to_tensor(rgb)
-        
-        cam_K = np.array(self.selected_scenes[ind]["cam_K"]).reshape(3, 3)
-        cam_depth_scale = 1 / self.selected_scenes[ind]["depth_scale"]
+    Args:
+        root_dir (str): Root directory of the BOP dataset.
+        batch_size (int): Batch size for data loading.
+        num_workers (int): Number of workers for data loading.
+        obj_id_list (list): List of object IDs to include in the dataset.
+        vis_ratio (float): Visibility ratio for the dataset.
+        remove_repeated_objects (bool): Whether to remove repeated objects from the dataset.
+    """
 
-        depth_im = o3d.io.read_image(depth_path)
-        im_width, im_height = depth_im.get_max_bound()
-        pinhole_cam = o3d.camera.PinholeCameraIntrinsic(
-            int(im_width), int(im_height), cam_K)
-        scene_pcl = o3d.geometry.PointCloud.create_from_depth_image(
-            depth_im, pinhole_cam, depth_scale=cam_depth_scale, depth_trunc=float('inf'))
-        scene_pcl = scene_pcl.points
-        xyz = torch.from_numpy(np.array(scene_pcl.points, dtype=np.float32))
-        xyz = xyz.reshape(*rgb.shape)
-        
-        # normalize xyz to [0, 255]
-        xyz = (xyz - xyz.min()) / xyz.max() * 255
-        
-        return {"rgb": self.transform(rgb), "depth": self.transform(xyz), "rgb_path": rgb_path, "depth_path": depth_path}
+    def __init__(self, root_dir, batch_size, num_workers=8, obj_id_list=[], vis_ratio=0, remove_repeated_objects=False):
+        super().__init__()
+        self.root_dir = root_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.obj_id_list = obj_id_list
+        self.vis_ratio = vis_ratio
+        self.remove_repeated_objects = remove_repeated_objects
+
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            self.train_dataset = BOP(
+                self.root_dir, "train", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
+            self.val_dataset = BOP(
+                self.root_dir, "val", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
+        if stage == 'test' or stage is None:
+            self.test_dataset = BOP(
+                self.root_dir, "test", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
