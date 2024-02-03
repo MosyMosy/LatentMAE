@@ -1,5 +1,5 @@
 import torch
-from models.latentMAE import LatentMAE
+from models.latentMAE import AutoEncoder,LatentMAE
 from models.util import patchify, unpatchify
 
 from dataloaders.bop import BOP_datamodule
@@ -23,16 +23,17 @@ def test_autoencoder():
     totensor = transforms.ToTensor()
     ToPIL = transforms.ToPILImage()
     sample = totensor(resizer(Image.open("lab/temp_data/sample.jpg"))).unsqueeze(0)    
-    model = LatentMAE()
+    model = AutoEncoder()
     model.load_pretrained_weights()
-    reconstructed = model(sample, mode = LatentMAE.forward_mode.full)
+    reconstructed = model(sample)
     ToPIL(reconstructed[0]).save(os.path.join("lab/temp_data/reconstructed.jpg"))
 
 def save_features():
-    model = LatentMAE()
+    model = AutoEncoder()
     model.to("cuda")
     model.load_pretrained_weights()
-    
+
+   
     # dataset = BOP("/export/livia/home/vision/Myazdanpanah/dataset/t-less", "train", obj_id_list=[1])
     data_loader = BOP_datamodule("/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=3)
     data_loader.setup(stage="fit")
@@ -42,8 +43,8 @@ def save_features():
         rgb_path = sample["rgb_path"]
         depth_path = sample["depth_path"]
         
-        rec_rgb = model(rgb, mode = LatentMAE.forward_mode.latent_feature)
-        rec_xyz_map = model(xyz_map, mode = LatentMAE.forward_mode.latent_feature)
+        rec_rgb = model(rgb, forward_mode = "latent_feature")
+        rec_xyz_map = model(xyz_map, forward_mode = "latent_feature")
         
         # save all the features in rec_rgb and rec_xyz_map  
         for i in range(rec_rgb.shape[0]):
