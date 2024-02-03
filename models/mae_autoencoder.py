@@ -25,12 +25,12 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=True):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
         super().__init__()
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
-        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
+        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim, strict_img_size=False)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -152,7 +152,8 @@ class MaskedAutoencoderViT(nn.Module):
         x = self.patch_embed(x)
 
         # add pos embed w/o cls token
-        x = x + self.pos_embed[:, 1:, :]
+        # x = x + self.pos_embed[:, 1:, :] modify by me
+        x = x + self.pos_embed[:, 1:x.shape[1]+1, :]
 
         # masking: length -> length * mask_ratio
         x, mask, ids_restore = self.random_masking(x, mask_ratio)
@@ -180,7 +181,8 @@ class MaskedAutoencoderViT(nn.Module):
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
 
         # add pos embed
-        x = x + self.decoder_pos_embed
+        # x = x + self.decoder_pos_embed modify by me :x.shape[1]+1
+        x = x + self.decoder_pos_embed[:, :x.shape[1], :]
 
         # apply Transformer blocks
         for blk in self.decoder_blocks:

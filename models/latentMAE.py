@@ -1,5 +1,5 @@
 from models.ldm_autoencoder import AutoencoderKL
-from models.mae_autoencoder import mae_vit_base_patch16
+from models.mae_autoencoder import mae_vit_base_patch16, mae_vit_large_patch16
 import pytorch_lightning as pl
 import torch
 from torch import Tensor, nn
@@ -100,7 +100,7 @@ class LatentMAE(pl.LightningModule):
     ) -> None:
         super().__init__()
 
-        self.mae = mae_vit_base_patch16()
+        self.mae = mae_vit_base_patch16(norm_pix_loss=True)
         self.latent_patch_size = latent_patch_size
 
         self.in_adapter = adapter(
@@ -113,10 +113,10 @@ class LatentMAE(pl.LightningModule):
         self.pretrained_path = pretrained_path
 
     def forward(self, x, mask_ratio=0.75, mae_forward_mode="full"):
-        B = x.shape[0]
 
-        z = self.in_adapter(z)
-        mae_shape = z.shape
+        z = self.in_adapter(x)
+        z = z.permute(0,2,3,1)
+        z = torch.einsum('nhwc->nchw', z)
         z, mask, ids_restore = self.mae.forward_encoder(z, mask_ratio)
 
         if mae_forward_mode == "mae_feature":
@@ -124,9 +124,12 @@ class LatentMAE(pl.LightningModule):
 
         z = self.mae.forward_decoder(z, ids_restore)  # [N, L, p*p*3]
         z = self.mae.unpatchify(z)
-        z = self.out_adapter(z)
+        z = torch.einsum('nchw->nhwc', z).detach().cpu()
+ 
+        z = z.permute(0,3,1,2)
+        z = self.out_adapter(z)  
 
-        return z
+        return z, mask, ids_restore
 
     def load_pretrained_weights(self):
         sd = torch.load(self.pretrained_path, map_location="cpu")
