@@ -19,13 +19,13 @@ def test_model():
     print(resutl.shape)  
 
 def test_autoencoder():    
-    resizer = transforms.Resize((560, 560))
+    resizer = transforms.Resize((448, 448))
     totensor = transforms.ToTensor()
     ToPIL = transforms.ToPILImage()
-    sample = totensor(resizer(Image.open("lab/temp_data/xyz_map.jpg"))).unsqueeze(0)    
+    sample = totensor(resizer(Image.open("lab/temp_data/sample.jpg"))).unsqueeze(0)    
     model = LatentMAE()
     model.load_pretrained_weights()
-    reconstructed = model(sample, mode = LatentMAE.forward_mode.autoencoder)
+    reconstructed = model(sample, mode = LatentMAE.forward_mode.full)
     ToPIL(reconstructed[0]).save(os.path.join("lab/temp_data/reconstructed.jpg"))
 
 def save_features():
@@ -58,6 +58,6 @@ def save_features():
         print(f"Batch {b} done", end="\r")
         
 # test_model()
-# test_autoencoder()
-save_features()
+test_autoencoder()
+# save_features()
 

@@ -31,12 +31,9 @@ class BOP(Dataset):
         remove_repeated_objects (bool, optional): Whether to remove scenes with repeated objects.
     """
 
-    def __init__(self, root_dir, phase, transform=None, obj_id_list=[], vis_ratio=0, remove_repeated_objects=False):
+    def __init__(self, root_dir, phase, transform=None):
         super().__init__()
         self.logger = logging.getLogger(__name__)
-
-        if len(obj_id_list) == 0:
-            obj_id_list = range(1, 31)
 
         self.root = None
         if isinstance(root_dir, str):
@@ -61,8 +58,7 @@ class BOP(Dataset):
         assert phase in ['train', 'val', 'test']
         base_dir = self.train_dir if phase in ['train'] else self.test_dir
 
-        self.create_data_list(obj_id_list, vis_ratio,
-                              remove_repeated_objects, base_dir)
+        self.create_data_list(base_dir)
 
         if transform is None:
             self.transform = Compose([Resize((448, 448)), ToTensor()])
@@ -105,7 +101,6 @@ class BOP(Dataset):
         xyz_map = self.transform(xyz_map)
 
         return {"rgb": rgb, "xyz_map": xyz_map, "rgb_path": rgb_path, "depth_path": depth_path}
-
 
     def calculate_xyz_map(self, depth_image, camera_K, cam_depth_scale):
         """
@@ -150,7 +145,7 @@ class BOP(Dataset):
 
         return xyz_map.permute((2, 0, 1)).float()
 
-    def create_data_list(self, obj_id_list, vis_ratio, remove_repeated_objects, base_dir):
+    def create_data_list(self, base_dir):
         """
         Creates a list of selected scenes based on the given parameters.
 
@@ -162,7 +157,6 @@ class BOP(Dataset):
         """
         setup_dirs = [name for name in os.listdir(
             base_dir) if os.path.isdir(os.path.join(base_dir))]
-        scene_obj_list = []
         for setup_dir in setup_dirs:
             scene_gt_path = os.path.join(base_dir, setup_dir, "scene_gt.json")
             camera_gt_path = os.path.join(
@@ -172,32 +166,11 @@ class BOP(Dataset):
             with open(scene_gt_path) as scenes_f, open(camera_gt_path) as camera_f, open(scene_info_path) as scene_info_f:
                 scenes_dic = json.load(scenes_f)
                 cameras_dic = json.load(camera_f)
-                scene_info_dic = json.load(scene_info_f)
-                for scene_id, obj_list in scenes_dic.items():
-                    for i, obj_dic in enumerate(obj_list):
-                        for obj_id in obj_id_list:
-                            if (obj_dic["obj_id"] == obj_id):
-                                # remove low visible items
-                                if scene_info_dic[scene_id][i]["visib_fract"] < vis_ratio:
-                                    continue
-                                data_dic = {"dir": os.path.join(
-                                    base_dir, setup_dir), "scene_id": int(scene_id), "obj_index": i}
-                                data_dic.update(obj_dic)
-                                data_dic.update(cameras_dic[scene_id])
-                                self.selected_scenes.append(data_dic)
-                                scene_obj_list.append(
-                                    [int(setup_dir), int(scene_id), obj_id])
-
-        if len(self.selected_scenes) == 0:
-            raise AssertionError(
-                "there is no selected obj_num {0} in the given directory.".format(obj_id_list))
-
-        # remove the scenes with repeated objects
-        if remove_repeated_objects:
-            _, indexes, count = np.unique(
-                np.array(scene_obj_list), axis=0, return_counts=True, return_index=True)
-            indexes = indexes[count == 1]
-            self.selected_scenes = [self.selected_scenes[i] for i in indexes]
+                for scene_id, _ in scenes_dic.items():
+                    data_dic = {"dir": os.path.join(
+                        base_dir, setup_dir), "scene_id": int(scene_id)}
+                    data_dic.update(cameras_dic[scene_id])
+                    self.selected_scenes.append(data_dic)
 
 
 class BOP_datamodule(pl.LightningDataModule):
@@ -213,24 +186,18 @@ class BOP_datamodule(pl.LightningDataModule):
         remove_repeated_objects (bool): Whether to remove repeated objects from the dataset.
     """
 
-    def __init__(self, root_dir, batch_size, num_workers=8, obj_id_list=[], vis_ratio=0, remove_repeated_objects=False):
+    def __init__(self, root_dir, batch_size, num_workers=8):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.obj_id_list = obj_id_list
-        self.vis_ratio = vis_ratio
-        self.remove_repeated_objects = remove_repeated_objects
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
-            self.train_dataset = BOP(
-                self.root_dir, "train", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
-            self.val_dataset = BOP(
-                self.root_dir, "val", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
+            self.train_dataset = BOP(self.root_dir, "train")
+            self.val_dataset = BOP(self.root_dir, "val")
         if stage == 'test' or stage is None:
-            self.test_dataset = BOP(
-                self.root_dir, "test", obj_id_list=self.obj_id_list, vis_ratio=self.vis_ratio, remove_repeated_objects=self.remove_repeated_objects)
+            self.test_dataset = BOP(self.root_dir, "test")
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
