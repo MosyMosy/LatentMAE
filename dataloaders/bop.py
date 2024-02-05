@@ -37,26 +37,26 @@ class BOP(Dataset):
 
         self.root = None
         if isinstance(root_dir, str):
-            if os.path.exists(f'{root_dir}'):
+            if os.path.exists(f"{root_dir}"):
                 self.root = root_dir
 
         if self.root is None:
-            raise AssertionError(f'Dataset not found in {root_dir}')
+            raise AssertionError(f"Dataset not found in {root_dir}")
         else:
-            self.logger.info(f'Loading data from {self.root}')
+            self.logger.info(f"Loading data from {self.root}")
 
         self.depth_threshold = 3000
         # set the directories related to the T-Less dataset
         self.train_dir = os.path.join(self.root, "train_pbr")
         self.test_dir = os.path.join(
-            self.root, "tless_test_primesense_bop19", "test_primesense")
-        self.cad_dir = os.path.join(
-            self.root, "tless_models", "models_cad")
+            self.root, "tless_test_primesense_bop19", "test_primesense"
+        )
+        self.cad_dir = os.path.join(self.root, "tless_models", "models_cad")
 
         # each directory is related to a specific camera and scene setup
         self.selected_scenes = []
-        assert phase in ['train', 'val', 'test']
-        base_dir = self.train_dir if phase in ['train'] else self.test_dir
+        assert phase in ["train", "val", "test"]
+        base_dir = self.train_dir if phase in ["train"] else self.test_dir
 
         self.create_data_list(base_dir)
 
@@ -84,10 +84,16 @@ class BOP(Dataset):
         Returns:
             dict: A dictionary containing the RGB image, XYZ map, RGB image path, and depth image path.
         """
-        rgb_path = os.path.join(self.selected_scenes[ind]["dir"], "rgb", str(
-            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".jpg")
-        depth_path = os.path.join(self.selected_scenes[ind]["dir"], "depth", str(
-            self.selected_scenes[ind]["scene_id"]).zfill(6) + ".png")
+        rgb_path = os.path.join(
+            self.selected_scenes[ind]["dir"],
+            "rgb",
+            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".jpg",
+        )
+        depth_path = os.path.join(
+            self.selected_scenes[ind]["dir"],
+            "depth",
+            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".png",
+        )
 
         rgb = Image.open(rgb_path)
         rgb = self.transform(rgb)
@@ -100,7 +106,12 @@ class BOP(Dataset):
         xyz_map = ToPILImage()(xyz_map)
         xyz_map = self.transform(xyz_map)
 
-        return {"rgb": rgb, "xyz_map": xyz_map, "rgb_path": rgb_path, "depth_path": depth_path}
+        return {
+            "rgb": rgb,
+            "xyz_map": xyz_map,
+            "rgb_path": rgb_path,
+            "depth_path": depth_path,
+        }
 
     def calculate_xyz_map(self, depth_image, camera_K, cam_depth_scale):
         """
@@ -125,7 +136,7 @@ class BOP(Dataset):
 
         x = torch.linspace(0, height - 1, height)
         y = torch.linspace(0, width - 1, width)
-        x, y = torch.meshgrid(x, y, indexing='ij')
+        x, y = torch.meshgrid(x, y, indexing="ij")
 
         # Convert depth image to meters
         # if the depth image is in millimeters
@@ -155,22 +166,81 @@ class BOP(Dataset):
             remove_repeated_objects (bool): Whether to remove scenes with repeated objects.
             base_dir (str): Base directory of the dataset.
         """
-        setup_dirs = [name for name in os.listdir(
-            base_dir) if os.path.isdir(os.path.join(base_dir))]
+        setup_dirs = [
+            name
+            for name in os.listdir(base_dir)
+            if os.path.isdir(os.path.join(base_dir))
+        ]
         for setup_dir in setup_dirs:
             scene_gt_path = os.path.join(base_dir, setup_dir, "scene_gt.json")
-            camera_gt_path = os.path.join(
-                base_dir, setup_dir, "scene_camera.json")
-            scene_info_path = os.path.join(
-                base_dir, setup_dir, "scene_gt_info.json")
-            with open(scene_gt_path) as scenes_f, open(camera_gt_path) as camera_f, open(scene_info_path) as scene_info_f:
+            camera_gt_path = os.path.join(base_dir, setup_dir, "scene_camera.json")
+            scene_info_path = os.path.join(base_dir, setup_dir, "scene_gt_info.json")
+            with open(scene_gt_path) as scenes_f, open(
+                camera_gt_path
+            ) as camera_f, open(scene_info_path) as scene_info_f:
                 scenes_dic = json.load(scenes_f)
                 cameras_dic = json.load(camera_f)
                 for scene_id, _ in scenes_dic.items():
-                    data_dic = {"dir": os.path.join(
-                        base_dir, setup_dir), "scene_id": int(scene_id)}
+                    data_dic = {
+                        "dir": os.path.join(base_dir, setup_dir),
+                        "scene_id": int(scene_id),
+                    }
                     data_dic.update(cameras_dic[scene_id])
                     self.selected_scenes.append(data_dic)
+
+
+class BOP_feature(BOP):
+    """
+    A class representing a BOP feature dataset.
+
+    Args:
+        root_dir (str): The root directory of the dataset.
+        phase (str): The phase of the dataset (e.g., train, val, test).
+
+    Attributes:
+        root_dir (str): The root directory of the dataset.
+        phase (str): The phase of the dataset (e.g., train, val, test).
+        selected_scenes (list): A list of selected scenes.
+
+    Methods:
+        __getitem__(ind): Retrieves the RGB and depth features for a given index.
+
+    """
+
+    def __init__(self, root_dir, phase):
+        super().__init__(root_dir, phase, None)
+
+    def __getitem__(self, ind):
+        """
+        Retrieves the RGB and depth features for a given index.
+
+        Args:
+            ind (int): The index of the scene.
+
+        Returns:
+            dict: A dictionary containing the RGB and depth features, as well as their file paths.
+
+        """
+        rgb_feature_path = os.path.join(
+            self.selected_scenes[ind]["dir"],
+            "latent_rgb",
+            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".pt",
+        )
+        depth_feature_path = os.path.join(
+            self.selected_scenes[ind]["dir"],
+            "latent_depth",
+            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".pt",
+        )
+
+        rgb_feature = torch.load(rgb_feature_path)
+        depth_feature = torch.load(depth_feature_path)
+
+        return {
+            "rgb_feature": rgb_feature,
+            "depth_feature": depth_feature,
+            "rgb_feature_path": rgb_feature_path,
+            "depth_feature_path": depth_feature_path,
+        }
 
 
 class BOP_datamodule(pl.LightningDataModule):
@@ -193,17 +263,68 @@ class BOP_datamodule(pl.LightningDataModule):
         self.num_workers = num_workers
 
     def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
+        if stage == "fit" or stage is None:
             self.train_dataset = BOP(self.root_dir, "train")
             self.val_dataset = BOP(self.root_dir, "val")
-        if stage == 'test' or stage is None:
+        if stage == "test":
             self.test_dataset = BOP(self.root_dir, "test")
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(
+            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(
+            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
+
+
+class BOP_feature_datamodule(pl.LightningDataModule):
+    """
+    LightningDataModule for BOP feature dataset.
+
+    Args:
+        root_dir (str): Root directory of the BOP dataset.
+        batch_size (int): Batch size for data loading.
+        num_workers (int): Number of workers for data loading.
+    """
+
+    def __init__(self, root_dir, batch_size, num_workers=8):
+        super().__init__()
+        self.root_dir = root_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+    def setup(self, stage=None):
+        if stage == "fit" or stage is None:
+            self.train_dataset = BOP_feature(self.root_dir, "train")
+            self.val_dataset = BOP_feature(self.root_dir, "val")
+        if stage == "test":
+            self.test_dataset = BOP_feature(self.root_dir, "test")
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
