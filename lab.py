@@ -56,8 +56,8 @@ def save_features():
     data_loader = BOP_datamodule(
         "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=1
     )
-    data_loader.setup(stage="test")
-    loader = data_loader.test_dataloader()
+    data_loader.setup(stage="fit")
+    loader = data_loader.train_dataloader()
     for b, sample in enumerate(loader):
         rgb = sample["rgb"].to("cuda")
         xyz_map = sample["xyz_map"].to("cuda")

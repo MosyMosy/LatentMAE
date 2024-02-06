@@ -120,6 +120,7 @@ class LatentMAE(pl.LightningModule):
     def forward(self, x, mask_ratio=0.75, mae_forward_mode="full"):
 
         z = self.in_adapter(x)
+        H, W = z.shape[2], z.shape[3]
         z = z.permute(0,2,3,1)
         z = torch.einsum('nhwc->nchw', z)
         z, mask, ids_restore = self.mae.forward_encoder(z, mask_ratio)
@@ -128,13 +129,46 @@ class LatentMAE(pl.LightningModule):
             return z
 
         z = self.mae.forward_decoder(z, ids_restore)  # [N, L, p*p*3]
-        z = self.mae.unpatchify(z)
-        z = torch.einsum('nchw->nhwc', z).detach().cpu()
+        z = self.mae.unpatchify(z, H=H, W=W)
+        z = torch.einsum('nchw->nhwc', z)
  
         z = z.permute(0,3,1,2)
         z = self.out_adapter(z)  
 
         return z, mask, ids_restore
+    
+    def forward_loss(self, feature, pred, mask):
+        """
+        imgs: [N, 4, H, W]
+        pred: [N, 4, H, W]
+        mask: [N, L], 0 is keep, 1 is remove, 
+        """
+        target = self.patchify(feature)
+        source = self.patchify(pred)
+        if self.mae.norm_pix_loss:
+            mean = target.mean(dim=-1, keepdim=True)
+            var = target.var(dim=-1, keepdim=True)
+            target = (target - mean) / (var + 1.e-6)**.5
+
+        loss = (source - target) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
+    
+    def patchify(self, feature):
+        """
+        feature: (N, 4, H, W)
+        x: (N, L, patch_size**2 *4)
+        """
+        p = self.latent_patch_size
+        assert feature.shape[2] % p == 0 and feature.shape[3] % p == 0
+
+        h, w = feature.shape[2] // p , feature.shape[3] // p
+        x = feature.reshape(shape=(feature.shape[0], 4, h, p, w, p))
+        x = torch.einsum('nchpwq->nhwpqc', x)
+        x = x.reshape(shape=(feature.shape[0], h * w, p**2 * 4))
+        return x
 
     def load_pretrained_weights(self):
         sd = torch.load(self.pretrained_path, map_location="cpu")
@@ -142,25 +176,21 @@ class LatentMAE(pl.LightningModule):
         print(f"MAE restored from {self.pretrained_path}")
 
     def training_step(self, batch, batch_idx):
-        rgb_feature, xyz_feature = batch["rgb_feature"], batch["xyz_feature"]
-        x = torch.concatenate([rgb_feature, xyz_feature], dim=3)
-        pred, mask, _ = self.forward(x)
-        loss = self.mae.forward_loss(x, pred, mask)
-        self.log("train_loss", loss)
-        return loss
+        return self.shared_step(batch, batch_idx, "train")
     
     def validation_step(self, batch, batch_idx):
-        self._shared_eval(batch, batch_idx, "val")
+        return self.shared_step(batch, batch_idx, "val")
 
     def test_step(self, batch, batch_idx):
-        self._shared_eval(batch, batch_idx, "test")
-
-    def _shared_eval(self, batch, batch_idx, prefix):
-        rgb_feature, xyz_feature = batch["rgb_feature"], batch["xyz_feature"]
-        x = torch.concatenate([rgb_feature, xyz_feature], dim=3)
+        return self.shared_step(batch, batch_idx, "test")
+        
+    def shared_step(self, batch, batch_idx, stage):
+        x = batch["rgb_xyz_faeture"]
         pred, mask, _ = self.forward(x)
-        loss = self.mae.forward_loss(x, pred, mask)
-        self.log(f"{prefix}_loss", loss)
+        loss = self.forward_loss(x, pred, mask)
+        self.log(f"{stage}_loss", loss, batch_size=batch["rgb_xyz_faeture"].shape[0], sync_dist=True)
+        return loss
+
         
     def configure_optimizers(self):  
         total_steps = self.trainer.estimated_stepping_batches

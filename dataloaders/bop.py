@@ -64,7 +64,7 @@ class BOP(Dataset):
             self.transform = Compose([Resize((448, 448)), ToTensor()])
         else:
             self.transform = transform
-            
+
         self.phase = phase
 
     def __len__(self):
@@ -235,12 +235,15 @@ class BOP_feature(BOP):
             str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".pt",
         )
 
-        rgb_feature = torch.load(rgb_feature_path)
-        depth_feature = torch.load(depth_feature_path)
+        rgb_feature = torch.load(rgb_feature_path, map_location="cpu")
+        depth_feature = torch.load(depth_feature_path, map_location="cpu")
+        rgb_feature.requires_grad = False
+        depth_feature.requires_grad = False
 
         return {
             "rgb_feature": rgb_feature,
             "xyz_feature": depth_feature,
+            "rgb_xyz_faeture": torch.cat([rgb_feature, depth_feature], dim=2),
             "rgb_feature_path": rgb_feature_path,
             "xyz_feature_path": depth_feature_path,
         }
@@ -259,7 +262,7 @@ class BOP_datamodule(pl.LightningDataModule):
         remove_repeated_objects (bool): Whether to remove repeated objects from the dataset.
     """
 
-    def __init__(self, root_dir, batch_size, num_workers=8):
+    def __init__(self, root_dir, batch_size, num_workers=0):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
@@ -301,7 +304,7 @@ class BOP_feature_datamodule(pl.LightningDataModule):
         num_workers (int): Number of workers for data loading.
     """
 
-    def __init__(self, root_dir, batch_size, num_workers=8):
+    def __init__(self, root_dir, batch_size, num_workers=0):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
@@ -319,15 +322,19 @@ class BOP_feature_datamodule(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=False,
+            shuffle=True,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.val_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
         return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )

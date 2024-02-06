@@ -92,7 +92,7 @@ class MaskedAutoencoderViT(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def patchify(self, imgs):
+    def patchify_old(self, imgs):
         """
         imgs: (N, 3, H, W)
         x: (N, L, patch_size**2 *3)
@@ -105,8 +105,22 @@ class MaskedAutoencoderViT(nn.Module):
         x = torch.einsum('nchpwq->nhwpqc', x)
         x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
         return x
+    
+    def patchify(self, imgs):
+        """
+        imgs: (N, 3, H, W)
+        x: (N, L, patch_size**2 *3)
+        """
+        p = self.patch_embed.patch_size[0]
+        assert imgs.shape[2] % p == 0 and imgs.shape[3] % p == 0
 
-    def unpatchify(self, x):
+        h, w = imgs.shape[2] // p , imgs.shape[3] // p
+        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+        x = torch.einsum('nchpwq->nhwpqc', x)
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
+        return x
+
+    def unpatchify_old(self, x):
         """
         x: (N, L, patch_size**2 *3)
         imgs: (N, 3, H, W)
@@ -118,6 +132,22 @@ class MaskedAutoencoderViT(nn.Module):
         x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
         x = torch.einsum('nhwpqc->nchpwq', x)
         imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
+        return imgs
+    
+    def unpatchify(self, x, H, W):
+        """
+        x: (N, L, patch_size**2 *3)
+        imgs: (N, 3, H, W)
+        """
+        p = self.patch_embed.patch_size[0]
+        assert H%p==0 and W%p==0
+        
+        h, w =H//p, W//p
+        assert h * w == x.shape[1]
+        
+        x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
+        x = torch.einsum('nhwpqc->nchpwq', x)
+        imgs = x.reshape(shape=(x.shape[0], 3, h * p, w * p))
         return imgs
 
     def random_masking(self, x, mask_ratio):
