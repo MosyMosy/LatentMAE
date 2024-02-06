@@ -64,6 +64,8 @@ class BOP(Dataset):
             self.transform = Compose([Resize((448, 448)), ToTensor()])
         else:
             self.transform = transform
+            
+        self.phase = phase
 
     def __len__(self):
         """
@@ -84,10 +86,11 @@ class BOP(Dataset):
         Returns:
             dict: A dictionary containing the RGB image, XYZ map, RGB image path, and depth image path.
         """
+        rgb_ext = ".jpg" if self.phase == "train" else ".png"
         rgb_path = os.path.join(
             self.selected_scenes[ind]["dir"],
             "rgb",
-            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + ".jpg",
+            str(self.selected_scenes[ind]["scene_id"]).zfill(6) + rgb_ext,
         )
         depth_path = os.path.join(
             self.selected_scenes[ind]["dir"],
@@ -237,9 +240,9 @@ class BOP_feature(BOP):
 
         return {
             "rgb_feature": rgb_feature,
-            "depth_feature": depth_feature,
+            "xyz_feature": depth_feature,
             "rgb_feature_path": rgb_feature_path,
-            "depth_feature_path": depth_feature_path,
+            "xyz_feature_path": depth_feature_path,
         }
 
 

@@ -51,13 +51,14 @@ def save_features():
     model = AutoEncoder()
     model.to("cuda")
     model.load_pretrained_weights()
+    model.eval()
 
-    # dataset = BOP("/export/livia/home/vision/Myazdanpanah/dataset/t-less", "train", obj_id_list=[1])
     data_loader = BOP_datamodule(
-        "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=3
+        "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=1
     )
-    data_loader.setup(stage="fit")
-    for b, sample in enumerate(data_loader.train_dataloader()):
+    data_loader.setup(stage="test")
+    loader = data_loader.test_dataloader()
+    for b, sample in enumerate(loader):
         rgb = sample["rgb"].to("cuda")
         xyz_map = sample["xyz_map"].to("cuda")
         rgb_path = sample["rgb_path"]
@@ -73,7 +74,7 @@ def save_features():
                 os.makedirs(os.path.dirname(rgb_path[i]).replace("rgb", "latent_rgb"))
             torch.save(
                 rec_rgb[i],
-                rgb_path[i].replace("rgb", "latent_rgb").replace(".jpg", ".pt"),
+                rgb_path[i].replace("rgb", "latent_rgb").replace(".jpg", ".pt").replace(".png", ".pt"),
             )
 
             if if_not_exists(
@@ -91,6 +92,6 @@ def save_features():
 
 # test_model()
 # test_autoencoder()
-# save_features()
+save_features()
 
-test_latentmae()
+# test_latentmae()

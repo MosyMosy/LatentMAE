@@ -1,3 +1,5 @@
+from typing import Any, List, Union
+from pytorch_lightning.utilities.types import STEP_OUTPUT, LRSchedulerPLType
 from models.ldm_autoencoder import AutoencoderKL
 from models.mae_autoencoder import mae_vit_base_patch16, mae_vit_large_patch16
 import pytorch_lightning as pl
@@ -77,7 +79,7 @@ class AutoEncoder(pl.LightningModule):
             return z
 
         if latent_function is not None:
-            z = latent_function(z)
+            z = latent_function(z)[0]
 
         z = self.autoencoder.decode(z)
 
@@ -97,6 +99,7 @@ class LatentMAE(pl.LightningModule):
         mae_patch_size=16,
         mae_channel=3,
         pretrained_path="pretrained_ckpts/mae_pretrain_vit_base_full.pth",
+        base_batch_size = 256,
     ) -> None:
         super().__init__()
 
@@ -111,6 +114,8 @@ class LatentMAE(pl.LightningModule):
         )
 
         self.pretrained_path = pretrained_path
+        
+        self.base_batch_size = base_batch_size
 
     def forward(self, x, mask_ratio=0.75, mae_forward_mode="full"):
 
@@ -135,3 +140,44 @@ class LatentMAE(pl.LightningModule):
         sd = torch.load(self.pretrained_path, map_location="cpu")
         self.mae.load_state_dict(sd["model"], strict=True)
         print(f"MAE restored from {self.pretrained_path}")
+
+    def training_step(self, batch, batch_idx):
+        rgb_feature, xyz_feature = batch["rgb_feature"], batch["xyz_feature"]
+        x = torch.concatenate([rgb_feature, xyz_feature], dim=3)
+        pred, mask, _ = self.forward(x)
+        loss = self.mae.forward_loss(x, pred, mask)
+        self.log("train_loss", loss)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "val")
+
+    def test_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "test")
+
+    def _shared_eval(self, batch, batch_idx, prefix):
+        rgb_feature, xyz_feature = batch["rgb_feature"], batch["xyz_feature"]
+        x = torch.concatenate([rgb_feature, xyz_feature], dim=3)
+        pred, mask, _ = self.forward(x)
+        loss = self.mae.forward_loss(x, pred, mask)
+        self.log(f"{prefix}_loss", loss)
+        
+    def configure_optimizers(self):  
+        total_steps = self.trainer.estimated_stepping_batches
+        devices, nodes = self.trainer.num_devices, self.trainer.num_nodes
+        batch_size = self.trainer.train_dataloader.batch_size
+        lr_scale = devices * nodes * batch_size / self.base_batch_size
+        lr = 1e-3 * lr_scale
+
+        optim = torch.optim.AdamW(self.parameters(), lr=lr, betas=(.9, .95), weight_decay=0.05)
+        schedule = torch.optim.lr_scheduler.OneCycleLR(
+            optim,
+            max_lr=lr,
+            total_steps=total_steps,
+            pct_start=0.1,
+            cycle_momentum=False,
+        )
+        return {
+            'optimizer': optim, 
+            'lr_scheduler': {'scheduler': schedule, 'interval': 'step'}
+        }
