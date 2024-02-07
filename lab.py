@@ -2,7 +2,7 @@ import torch
 from models.latentMAE import AutoEncoder, LatentMAE
 from models.util import patchify, unpatchify
 
-from dataloaders.bop import BOP_datamodule
+from dataloaders.bop import BOP_datamodule, BOP_feature
 from PIL import Image
 from torchvision import transforms
 import os
@@ -47,7 +47,7 @@ def test_latentmae():
     ToPIL(reconstructed[0]).save(os.path.join("lab/temp_data/reconstructed.jpg"))
 
 
-def save_features():
+def save_features():    
     model = AutoEncoder()
     model.to("cuda")
     model.load_pretrained_weights()
@@ -56,8 +56,8 @@ def save_features():
     data_loader = BOP_datamodule(
         "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=1
     )
-    data_loader.setup(stage="fit")
-    loader = data_loader.train_dataloader()
+    data_loader.setup(stage="test")
+    loader = data_loader.test_dataloader()
     for b, sample in enumerate(loader):
         rgb = sample["rgb"].to("cuda")
         xyz_map = sample["xyz_map"].to("cuda")

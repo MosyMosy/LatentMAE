@@ -1,0 +1,12 @@
+latent_patch_size: 14
+latent_channel: 4
+mae_patch_size: 16
+mae_channel: 3
+pretrained_path: pretrained_ckpts/mae_pretrain_vit_base_full.pth
+mae_backbone: mae_vit_base_patch16
+mae_norm_pix_loss: true
+base_batch_size: 256
+use_pretrained: true
+root_dir: /export/livia/home/vision/Myazdanpanah/dataset/t-less
+batch_size: 256
+num_workers: 32

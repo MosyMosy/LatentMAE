@@ -8,8 +8,8 @@ import torch
 from torch.utils.data import Dataset
 
 from torchvision.transforms.functional import pil_to_tensor
-from torchvision.transforms import ToPILImage, ToTensor, Resize, Compose
-import pytorch_lightning as pl
+from torchvision.transforms import ToPILImage, ToTensor, Resize, Compose, Normalize
+import lightning.pytorch as pl
 
 
 from PIL import Image
@@ -61,7 +61,15 @@ class BOP(Dataset):
         self.create_data_list(base_dir)
 
         if transform is None:
-            self.transform = Compose([Resize((448, 448)), ToTensor()])
+            self.transform = Compose(
+                [
+                    Resize((448, 448)),
+                    ToTensor(),
+                    Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
         else:
             self.transform = transform
 
@@ -306,6 +314,7 @@ class BOP_feature_datamodule(pl.LightningDataModule):
 
     def __init__(self, root_dir, batch_size, num_workers=0):
         super().__init__()
+        self.save_hyperparameters()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.num_workers = num_workers

@@ -1,9 +1,32 @@
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
+import lightning.pytorch as pl
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from models.latentMAE import LatentMAE
 from dataloaders.bop import BOP_feature_datamodule
+from lightning.pytorch.cli import LightningCLI
+from models.mae_autoencoder import mae_vit_base_patch16, mae_vit_large_patch16
+import os.path as Path 
 
+
+def cli_main():    
+    cli = LightningCLI(LatentMAE, BOP_feature_datamodule)
+
+    # from https://github.com/Lightning-AI/pytorch-lightning/issues/1207
+    csv_logger = CSVLogger("logs", name="LatentMAE")
+    tb_logger = TensorBoardLogger("logs", name="LatentMAE")
+    checkpoint_dir = (
+        Path(tb_logger.save_dir)
+        / tb_logger.experiment.name
+        / f"version_{tb_logger.experiment.version}"
+        / "checkpoints"
+    )
+    filepath = checkpoint_dir / "{epoch}-{val_loss:.4f}"
+    checkpoint_cb = ModelCheckpoint(filepath=str(filepath),monitor="val_loss", save_top_k=3, mode="min", save_last=True, verbose=True)
+
+    cli.trainer.callbacks = [checkpoint_cb, csv_logger]
+    cli.trainer.logger = tb_logger
+    
+    return cli
 
 
 
@@ -46,4 +69,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    cli_main()
