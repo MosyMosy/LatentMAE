@@ -1,5 +1,5 @@
 # lightning.pytorch==2.1.3
-seed_everything: 2703392396
+seed_everything: false
 trainer:
   accelerator: gpu
   strategy: DDP
@@ -8,8 +8,45 @@ trainer:
   - 3
   num_nodes: 1
   precision: null
-  logger: null
-  callbacks: null
+  logger:
+  - class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: lightning_logs/tb_logs
+      name: LatentMAE
+      version: v0.2
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+      sub_dir: null
+      comment: ''
+      purge_step: null
+      max_queue: 10
+      flush_secs: 120
+      filename_suffix: ''
+  - class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: lightning_logs/csv_logs
+      name: LatentMAE
+      version: v0.2
+      prefix: ''
+      flush_logs_every_n_steps: 100
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: lightning_logs/checkpoints/v0.2/
+      filename: LatentMAE_{epoch:02d}_{step:02d}_{val_loss:.4f}
+      monitor: val_loss
+      verbose: false
+      save_last: null
+      save_top_k: 3
+      save_weights_only: false
+      mode: min
+      auto_insert_metric_name: true
+      every_n_train_steps: null
+      train_time_interval: null
+      every_n_epochs: null
+      save_on_train_epoch_end: null
+      enable_version_counter: true
   fast_dev_run: false
   max_epochs: 500
   min_epochs: null
@@ -24,7 +61,7 @@ trainer:
   val_check_interval: null
   check_val_every_n_epoch: 1
   num_sanity_val_steps: null
-  log_every_n_steps: 1
+  log_every_n_steps: 10
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
