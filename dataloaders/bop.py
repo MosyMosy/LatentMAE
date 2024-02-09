@@ -120,6 +120,7 @@ class BOP(Dataset):
         return {
             "rgb": rgb,
             "xyz_map": xyz_map,
+            "rgb_xyz": torch.cat([rgb, xyz_map], dim=2),
             "rgb_path": rgb_path,
             "depth_path": depth_path,
         }

@@ -1,0 +1,97 @@
+# lightning.pytorch==2.1.3
+seed_everything: false
+trainer:
+  accelerator: gpu
+  strategy: DDP
+  devices:
+  - 1
+  - 3
+  num_nodes: 1
+  precision: null
+  logger:
+  - class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: lightning_logs/tb_logs
+      name: LatentMAE_AE
+      version: v_initial
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+      sub_dir: null
+      comment: ''
+      purge_step: null
+      max_queue: 10
+      flush_secs: 120
+      filename_suffix: ''
+  - class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: lightning_logs/csv_logs
+      name: LatentMAE_AE
+      version: v_initial
+      prefix: ''
+      flush_logs_every_n_steps: 100
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: lightning_logs/checkpoints/LatentMAE_AE/v_initial/
+      filename: LatentMAE_{epoch:02d}_{step:02d}_{val_loss:.4f}
+      monitor: val_loss
+      verbose: false
+      save_last: null
+      save_top_k: 3
+      save_weights_only: false
+      mode: min
+      auto_insert_metric_name: true
+      every_n_train_steps: null
+      train_time_interval: null
+      every_n_epochs: null
+      save_on_train_epoch_end: null
+      enable_version_counter: true
+  fast_dev_run: false
+  max_epochs: 500
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: null
+  log_every_n_steps: 10
+  enable_checkpointing: null
+  enable_progress_bar: null
+  enable_model_summary: null
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  deterministic: null
+  benchmark: null
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: null
+model:
+  latent_patch_size: 14
+  latent_channel: 4
+  mae_patch_size: 16
+  mae_channel: 3
+  pretrained_path: pretrained_ckpts/mae_pretrain_vit_base_full.pth
+  mae_backbone: mae_vit_base_patch16
+  mae_norm_pix_loss: true
+  base_batch_size: 256
+  use_initial_pretrained: true
+  AE_pretrained_path: pretrained_ckpts/autoencoder_kl-f8.ckpt
+data:
+  root_dir: /export/livia/home/vision/Myazdanpanah/dataset/t-less
+  batch_size: 8
+  num_workers: 32
+ckpt_path: null

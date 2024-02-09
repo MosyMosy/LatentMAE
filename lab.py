@@ -90,6 +90,26 @@ def save_features():
         print(f"Batch {b} done", end="\r")
 
 
+def test_AE_size():  
+    model = AutoEncoder()
+    model.to("cuda")
+    model.load_pretrained_weights()
+    model.eval()
+
+    data_loader = BOP_datamodule(
+        "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=16
+    )
+    data_loader.setup(stage="test")
+    loader = data_loader.test_dataloader()
+    for b, sample in enumerate(loader):
+        rgb = sample["rgb"].to("cuda")
+        xyz_map = sample["xyz_map"].to("cuda")
+        rgb_path = sample["rgb_path"]
+        depth_path = sample["depth_path"]
+        # with torch.no_grad():
+        rec_rgb = model(rgb, forward_mode="Full")
+        rec_xyz_map = model(xyz_map, forward_mode="Full")
+
 # test_model()
 # test_autoencoder()
 save_features()
