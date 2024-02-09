@@ -1,0 +1,10 @@
+latent_patch_size: 14
+latent_channel: 4
+mae_patch_size: 16
+mae_channel: 3
+pretrained_path: pretrained_ckpts/mae_pretrain_vit_base_full.pth
+mae_backbone: mae_vit_base_patch16
+mae_norm_pix_loss: true
+base_batch_size: 256
+use_initial_pretrained: true
+AE_pretrained_path: pretrained_ckpts/autoencoder_kl-f8.ckpt

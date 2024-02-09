@@ -381,7 +381,9 @@ class LatentMAE_AE(pl.LightningModule):
             print(f"MAE restored from {self.pretrained_path}")
 
         feature_autoencoder.init_from_ckpt(path=self.AE_pretrained_path)
-        feature_autoencoder.eval()
+        for param in feature_autoencoder.parameters():
+            param.requires_grad = False
+        feature_autoencoder.eval()        
         feature_autoencoder.to(self.device)
         print(f"AutoEncoder restored from {self.AE_pretrained_path}")
 
@@ -400,10 +402,8 @@ class LatentMAE_AE(pl.LightningModule):
             torch.Tensor: Restored IDs tensor of shape (N, C, H, W).
         """
         feature_autoencoder.eval()
-
-        with torch.no_grad():
-            z = feature_autoencoder.encode(x).sample()
-        z.requires_grad = True
+       
+        z = feature_autoencoder.encode(x).sample()
 
         z = self.in_adapter(z)
         H, W = z.shape[2], z.shape[3]
@@ -420,10 +420,8 @@ class LatentMAE_AE(pl.LightningModule):
 
         z = z.permute(0, 3, 1, 2)
         z = self.out_adapter(z)
-
-        with torch.no_grad():
-            z = feature_autoencoder.decode(z)
-        z.requires_grad = True
+        
+        z = feature_autoencoder.decode(z)
 
         return z, mask, ids_restore
 

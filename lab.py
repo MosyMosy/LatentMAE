@@ -1,11 +1,12 @@
 import torch
-from models.latentMAE import AutoEncoder, LatentMAE
+from models.latentMAE import AutoEncoder, LatentMAE, ddconfig
 from models.util import patchify, unpatchify
 
 from dataloaders.bop import BOP_datamodule, BOP_feature
 from PIL import Image
 from torchvision import transforms
 import os
+from models.ldm_autoencoder import AutoencoderKL
 
 
 def test_model():
@@ -23,8 +24,13 @@ def test_autoencoder():
     totensor = transforms.ToTensor()
     ToPIL = transforms.ToPILImage()
     sample = totensor(resizer(Image.open("lab/temp_data/sample.jpg"))).unsqueeze(0)
-    model = AutoEncoder()
+    model = AutoEncoder()    
     model.load_pretrained_weights()
+    
+    # model = AutoencoderKL(embed_dim=4, ddconfig=ddconfig)
+    # model.init_from_ckpt(path="pretrained_ckpts/autoencoder_kl-f8.ckpt")
+    for param in model.parameters():
+        param.requires_grad = False
     reconstructed = model(sample)
     ToPIL(reconstructed[0]).save(os.path.join("lab/temp_data/reconstructed.jpg"))
 
@@ -94,10 +100,12 @@ def test_AE_size():
     model = AutoEncoder()
     model.to("cuda")
     model.load_pretrained_weights()
+    for param in model.parameters():
+        param.requires_grad = False
     model.eval()
 
     data_loader = BOP_datamodule(
-        "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=16
+        "/export/livia/home/vision/Myazdanpanah/dataset/t-less", batch_size=8
     )
     data_loader.setup(stage="test")
     loader = data_loader.test_dataloader()
@@ -112,6 +120,6 @@ def test_AE_size():
 
 # test_model()
 # test_autoencoder()
-save_features()
-
+# save_features()
+test_AE_size()
 # test_latentmae()
