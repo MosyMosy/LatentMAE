@@ -65,13 +65,13 @@ class BOP(Dataset):
                 [
                     Resize((448, 448)),
                     ToTensor(),
-                    Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
                 ]
             )
         else:
             self.transform = transform
+        self.imagenet_nomralize = Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
 
         self.phase = phase
 
@@ -108,6 +108,7 @@ class BOP(Dataset):
 
         rgb = Image.open(rgb_path)
         rgb = self.transform(rgb)
+        rgb = self.imagenet_nomralize(rgb)
 
         cam_K = np.array(self.selected_scenes[ind]["cam_K"]).reshape(3, 3)
         cam_depth_scale = 1 / self.selected_scenes[ind]["depth_scale"]
@@ -271,25 +272,27 @@ class BOP_datamodule(pl.LightningDataModule):
         remove_repeated_objects (bool): Whether to remove repeated objects from the dataset.
     """
 
-    def __init__(self, root_dir, batch_size, num_workers=0):
+    def __init__(self, root_dir, batch_size, num_workers=0, transform=None, shuffle=True):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.transform = transform
+        self.shuffle = shuffle
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
-            self.train_dataset = BOP(self.root_dir, "train")
-            self.val_dataset = BOP(self.root_dir, "val")
+            self.train_dataset = BOP(self.root_dir, "train", transform=self.transform)
+            self.val_dataset = BOP(self.root_dir, "val", transform=self.transform)
         if stage == "test":
-            self.test_dataset = BOP(self.root_dir, "test")
+            self.test_dataset = BOP(self.root_dir, "test", transform=self.transform)
 
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=False,
+            shuffle=self.shuffle,
         )
 
     def val_dataloader(self):
