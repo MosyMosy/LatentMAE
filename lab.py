@@ -3,7 +3,7 @@ import torch.nn as nn
 from models.latentMAE import AutoEncoder, LatentMAE, ddconfig
 from models.util import patchify, unpatchify
 
-from dataloaders.bop import BOP_datamodule, BOP_feature
+from dataloaders.bop import BOP_datamodule, BOP_feature, BOP
 from PIL import Image
 from torchvision import transforms
 import os
@@ -178,7 +178,7 @@ def test_AE_rec_loss():
 
 
 def test_autoencoder_rec(
-    checkpoint_path="lightning_logs/checkpoints/LatentMAE_AE/v_frozen_ae/LatentMAE_epoch=51_step=433368_val_loss=0.7501.ckpt",
+    checkpoint_path="lightning_logs/checkpoints/LatentMAE_AE/v_frozen_ae/LatentMAE_epoch=95_step=800064_val_loss=0.7492.ckpt",
 ):
     transform = transforms.Compose(
         [
@@ -191,8 +191,8 @@ def test_autoencoder_rec(
         batch_size=1,
         transform=transform,
     )
-    data_module.setup(stage="fit")
-    dataset = data_module.train_dataset
+    data_module.setup(stage="test")
+    dataset = data_module.test_dataset
     mae_func = LatentMAE.load_from_checkpoint(checkpoint_path, map_location="cpu")
     mae_func.eval()
     model = AutoEncoder()
@@ -204,6 +204,9 @@ def test_autoencoder_rec(
         with torch.no_grad():
             reconstructed_mae = model(random_sample, latent_function=mae_func)
             reconstructed_ae = model(random_sample)
+            reconstructed_mae = BOP.invNorm_transform(reconstructed_mae)
+            reconstructed_ae = BOP.invNorm_transform(reconstructed_ae)
+            random_sample[0] = BOP.invNorm_transform(random_sample[0])
         transforms.ToPILImage()(reconstructed_mae[0]).save(
             "lab/temp_data/rec_mae_full/rec_{}.jpg".format(rand_indes)
         )
@@ -220,8 +223,8 @@ def test_autoencoder_rec(
 # test_model()
 # test_autoencoder()
 
-save_features(stage="test")
-save_features(stage="fit")
+# save_features(stage="test")
+# save_features(stage="fit")
 
 
 # test_AE_size()
@@ -230,4 +233,4 @@ save_features(stage="fit")
 
 # test_AE_rec_loss()
 
-# test_autoencoder_rec()
+test_autoencoder_rec()

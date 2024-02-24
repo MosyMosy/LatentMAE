@@ -193,6 +193,8 @@ class LatentMAE(pl.LightningModule):
         H, W = z.shape[2], z.shape[3]
         z = z.permute(0, 2, 3, 1)
         z = torch.einsum("nhwc->nchw", z)
+        if not self.training:
+            mask_ratio = 0.0
         z, mask, ids_restore = self.mae.forward_encoder(z, mask_ratio)
 
         if mae_forward_mode == "mae_feature":

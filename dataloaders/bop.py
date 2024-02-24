@@ -69,9 +69,6 @@ class BOP(Dataset):
             )
         else:
             self.transform = transform
-        self.imagenet_nomralize = Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        )
 
         self.phase = phase
 
@@ -108,7 +105,7 @@ class BOP(Dataset):
 
         rgb = Image.open(rgb_path)
         rgb = self.transform(rgb)
-        rgb = self.imagenet_nomralize(rgb)
+        rgb = BOP.norm_transform(rgb)
 
         cam_K = np.array(self.selected_scenes[ind]["cam_K"]).reshape(3, 3)
         cam_depth_scale = 1 / self.selected_scenes[ind]["depth_scale"]
@@ -201,6 +198,15 @@ class BOP(Dataset):
                     data_dic.update(cameras_dic[scene_id])
                     self.selected_scenes.append(data_dic)
 
+    invNorm_transform = Compose(
+        [
+            Normalize(mean=[0.0, 0.0, 0.0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
+            Normalize(mean=[-0.485, -0.456, -0.406], std=[1.0, 1.0, 1.0]),
+        ]
+    )
+
+    norm_transform = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
 
 class BOP_feature(BOP):
     """
@@ -272,7 +278,9 @@ class BOP_datamodule(pl.LightningDataModule):
         remove_repeated_objects (bool): Whether to remove repeated objects from the dataset.
     """
 
-    def __init__(self, root_dir, batch_size, num_workers=0, transform=None, shuffle=True):
+    def __init__(
+        self, root_dir, batch_size, num_workers=0, transform=None, shuffle=True
+    ):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
